@@ -1,0 +1,24 @@
+{
+  "name": "pki-auth-server",
+  "version": "1.0.0",
+  "description": "US Gov's CaC styled website auth server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node ./dist/index.js",
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhiyan114/pki-auth-server.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zhiyan114/pki-auth-server/issues"
+  },
+  "homepage": "https://github.com/zhiyan114/pki-auth-server#readme",
+  "devDependencies": {
+    "@types/node": "^22.1.0",
+    "typescript": "^5.5.4"
+  }
+}
