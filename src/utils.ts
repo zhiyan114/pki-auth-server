@@ -1,8 +1,8 @@
 import { IncomingMessage, ServerResponse } from 'http';
-import { allow_domain } from '../config.json';
-import { TLSSocket } from 'tls';
+import { allow_domain, rejectNoValidCRL } from '../config.json';
+import { DetailedPeerCertificate, TLSSocket } from 'tls';
 import { readdirSync, readFileSync } from 'fs';
-import { X509Certificate } from 'crypto';
+import { CertificateRevocationList, CRLDistributionPoints, Certificate } from 'pkijs';
 import { getCertStatus } from 'easy-ocsp';
 
 // Checks if the request domain is whitelisted on allow_domain
@@ -71,17 +71,41 @@ export async function checkClientCert(req: IncomingMessage) {
     // OCSP check first
     // @TODO: Do OCSP check and if that fails, do CRL check
 
-    switch((await getCertStatus(userCert.raw)).status) {
-        case "revoked":
-            console.log(`OCSP: ${userCert.serialNumber} failed the check`)
-            return false;
-        case "good":
-            console.log(`OCSP: ${userCert.serialNumber} passed the check`)
-            return true;
+    try {
+        switch((await getCertStatus(userCert.raw)).status) {
+            case "revoked":
+                console.log(`OCSP: ${userCert.serialNumber} failed the check`)
+                return false;
+            case "good":
+                console.log(`OCSP: ${userCert.serialNumber} passed the check`)
+                return true;
+        }
+    } catch(ex: unknown) {
+        const err = ex as Error;
+        if(err.message === "Certificate does not contain OCSP url")
+            return CRLCheck(userCert);
+        return !rejectNoValidCRL;
     }
+}
 
+function CRLCheck(cert: DetailedPeerCertificate): boolean {
     // CRL Checks
+    const distPointExists = Certificate.fromBER(cert.raw).extensions?.find((ext) => ext.extnID === "2.5.29.31");
+    // You should at least have a CRL... right?
+    if(!distPointExists)
+        return !rejectNoValidCRL;
+    const distroPoint = CRLDistributionPoints.fromBER(distPointExists?.extnValue.valueBlock.valueHexView).distributionPoints;
     
-    
+    const RevocationURI: string[] = [];
+    for(const distro of distroPoint)
+        if(distro.distributionPoint)
+            // @ts-expect-error - Bad Type Definition
+            for(const point of distro.distributionPoint)
+                if(point.type === 6)
+                    RevocationURI.push(point.value);
+    if(RevocationURI.length === 0)
+        return !rejectNoValidCRL;
+
+    // @TODO: Fetch the CRL from the actual URL and do the checks
     return true;
 }

@@ -1,5 +1,6 @@
 {
     "allow_domain": [
         "localhost"
-    ]
+    ],
+    "rejectNoValidCRL": false
 }

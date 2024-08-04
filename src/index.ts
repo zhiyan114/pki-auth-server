@@ -1,9 +1,8 @@
 import { createServer } from "https";
 import { checkCA, checkClientCert, domainCheck, getAllCAContent, setCORS } from "./utils";
 import { config } from "dotenv";
-import { readdirSync } from "fs";
 import { TLSSocket } from "tls";
-import redis from "redis";
+import {createClient} from "redis";
 import { randomBytes } from "crypto";
 
 config();
@@ -13,7 +12,7 @@ console.log(`Loaded ${ca_data.length} CA certificates.`);
 // Redis server
 if(!process.env["REIDS_CONN"])
     throw new Error("REIDS_CONN is not set in .env (required for auth token caching)");
-const redisClient = redis.createClient({
+const redisClient = createClient({
     url: process.env["REIDS_CONN"],
 });
 
@@ -30,6 +29,10 @@ const server = createServer({
 
     setCORS(res);
     res.setHeader('Connection', 'close'); // NoKeepAlive
+
+    // Return immediate if request is options
+    if(req.method !== "GET")
+        return res.writeHead(400).end();
 
     if(!checkCA(req) || !checkClientCert(req))
         return res.writeHead(403).end("Forbidden");
@@ -48,11 +51,11 @@ const server = createServer({
     const randToken = randomBytes(24).toString("hex");
     await redisClient.set(`PKIAuth:FP:${userCert.fingerprint}`, randToken, {EX: 300});
     await redisClient.set(`PKIAuth:Token:${randToken}`, JSON.stringify({
-        serial: userCert.serialNumber,
+        Serial: userCert.serialNumber,
         CN: userCert.subject.CN,
         SubAlt: userCert.subjectaltname,
         KeyUsage: userCert.ext_key_usage,
-        CA_FP: userCert.issuerCertificate?.fingerprint,
+        CAFP: userCert.issuerCertificate?.fingerprint,
     }), {EX: 300});
     return res.writeHead(200).end(randToken);
 })
