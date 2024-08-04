@@ -5,3 +5,5 @@ dist/
 **/*.cer
 **/*.crt
 **/*.pem
+**/*.crl
+temp/

@@ -1,9 +1,9 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { allow_domain, rejectNoValidCRL } from '../config.json';
-import { DetailedPeerCertificate, TLSSocket } from 'tls';
+import { TLSSocket } from 'tls';
 import { readdirSync, readFileSync } from 'fs';
-import { CertificateRevocationList, CRLDistributionPoints, Certificate } from 'pkijs';
 import { getCertStatus } from 'easy-ocsp';
+import { CRLCheck } from './CRLManager';
 
 // Checks if the request domain is whitelisted on allow_domain
 export function domainCheck(req: IncomingMessage): boolean {
@@ -68,9 +68,7 @@ export async function checkClientCert(req: IncomingMessage) {
     if(Date.now() > new Date(userCert.valid_to).getTime())
         return false;
 
-    // OCSP check first
-    // @TODO: Do OCSP check and if that fails, do CRL check
-
+    // OCSP check (with CRL fallback)
     try {
         switch((await getCertStatus(userCert.raw)).status) {
             case "revoked":
@@ -83,29 +81,8 @@ export async function checkClientCert(req: IncomingMessage) {
     } catch(ex: unknown) {
         const err = ex as Error;
         if(err.message === "Certificate does not contain OCSP url")
-            return CRLCheck(userCert);
+            return await CRLCheck(userCert);
         return !rejectNoValidCRL;
     }
 }
 
-function CRLCheck(cert: DetailedPeerCertificate): boolean {
-    // CRL Checks
-    const distPointExists = Certificate.fromBER(cert.raw).extensions?.find((ext) => ext.extnID === "2.5.29.31");
-    // You should at least have a CRL... right?
-    if(!distPointExists)
-        return !rejectNoValidCRL;
-    const distroPoint = CRLDistributionPoints.fromBER(distPointExists?.extnValue.valueBlock.valueHexView).distributionPoints;
-    
-    const RevocationURI: string[] = [];
-    for(const distro of distroPoint)
-        if(distro.distributionPoint)
-            // @ts-expect-error - Bad Type Definition
-            for(const point of distro.distributionPoint)
-                if(point.type === 6)
-                    RevocationURI.push(point.value);
-    if(RevocationURI.length === 0)
-        return !rejectNoValidCRL;
-
-    // @TODO: Fetch the CRL from the actual URL and do the checks
-    return true;
-}
