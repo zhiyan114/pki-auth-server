@@ -1,5 +1,5 @@
 import { createServer } from "https";
-import { checkCA, domainCheck, getAllCAContent, setCORS } from "./utils";
+import { checkCA, checkClientCert, domainCheck, getAllCAContent, setCORS } from "./utils";
 import { config } from "dotenv";
 import { readdirSync } from "fs";
 import { TLSSocket } from "tls";
@@ -31,7 +31,7 @@ const server = createServer({
     setCORS(res);
     res.setHeader('Connection', 'close'); // NoKeepAlive
 
-    if(!checkCA(req))
+    if(!checkCA(req) || !checkClientCert(req))
         return res.writeHead(403).end("Forbidden");
     if(!domainCheck(req))
         return res.writeHead(403).end("Forbidden");
@@ -54,6 +54,7 @@ const server = createServer({
         KeyUsage: userCert.ext_key_usage,
         CA_FP: userCert.issuerCertificate?.fingerprint,
     }), {EX: 300});
+    return res.writeHead(200).end(randToken);
 })
 
 

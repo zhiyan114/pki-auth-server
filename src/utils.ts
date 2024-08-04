@@ -2,6 +2,7 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { allow_domain } from '../config.json';
 import { TLSSocket } from 'tls';
 import { readdirSync, readFileSync } from 'fs';
+import { X509Certificate } from 'crypto';
 
 // Checks if the request domain is whitelisted on allow_domain
 export function domainCheck(req: IncomingMessage): boolean {
@@ -47,6 +48,7 @@ export function setCORS(res: ServerResponse<IncomingMessage>) {
 export function checkCA(req: IncomingMessage): boolean {
     const socket = req.socket as TLSSocket;
     const userCert = socket.getPeerCertificate(true)
+    
     if(!socket.authorized)
         return false;
     if(!userCert || !userCert.issuerCertificate)
@@ -60,6 +62,13 @@ export function checkCA(req: IncomingMessage): boolean {
 export function checkClientCert(req: IncomingMessage) {
     const socket = req.socket as TLSSocket;
     const userCert = socket.getPeerCertificate(true)
-    //@TODO: Expiration, CRL, and OCSP checks here
+
+    // Start with expiration check
+    if(Date.now() > new Date(userCert.valid_to).getTime())
+        return false;
+
+    // OCSP check first
+    // @TODO: Do OCSP check and if that fails, do CRL check
+    
     return true;
 }
