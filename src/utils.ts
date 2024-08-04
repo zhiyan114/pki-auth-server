@@ -3,6 +3,7 @@ import { allow_domain } from '../config.json';
 import { TLSSocket } from 'tls';
 import { readdirSync, readFileSync } from 'fs';
 import { X509Certificate } from 'crypto';
+import { getCertStatus } from 'easy-ocsp';
 
 // Checks if the request domain is whitelisted on allow_domain
 export function domainCheck(req: IncomingMessage): boolean {
@@ -48,7 +49,7 @@ export function setCORS(res: ServerResponse<IncomingMessage>) {
 export function checkCA(req: IncomingMessage): boolean {
     const socket = req.socket as TLSSocket;
     const userCert = socket.getPeerCertificate(true)
-    
+
     if(!socket.authorized)
         return false;
     if(!userCert || !userCert.issuerCertificate)
@@ -59,7 +60,7 @@ export function checkCA(req: IncomingMessage): boolean {
     return true;
 }
 
-export function checkClientCert(req: IncomingMessage) {
+export async function checkClientCert(req: IncomingMessage) {
     const socket = req.socket as TLSSocket;
     const userCert = socket.getPeerCertificate(true)
 
@@ -69,6 +70,18 @@ export function checkClientCert(req: IncomingMessage) {
 
     // OCSP check first
     // @TODO: Do OCSP check and if that fails, do CRL check
+
+    switch((await getCertStatus(userCert.raw)).status) {
+        case "revoked":
+            console.log(`OCSP: ${userCert.serialNumber} failed the check`)
+            return false;
+        case "good":
+            console.log(`OCSP: ${userCert.serialNumber} passed the check`)
+            return true;
+    }
+
+    // CRL Checks
+    
     
     return true;
 }
