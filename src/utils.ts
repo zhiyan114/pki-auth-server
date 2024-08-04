@@ -47,10 +47,19 @@ export function setCORS(res: ServerResponse<IncomingMessage>) {
 export function checkCA(req: IncomingMessage): boolean {
     const socket = req.socket as TLSSocket;
     const userCert = socket.getPeerCertificate(true)
+    if(!socket.authorized)
+        return false;
     if(!userCert || !userCert.issuerCertificate)
         return false;
     // Disallow self-signed cause you really wouldn't need to use this anyway for that
     if(userCert.issuerCertificate.fingerprint === userCert.fingerprint)
         return false;
+    return true;
+}
+
+export function checkClientCert(req: IncomingMessage) {
+    const socket = req.socket as TLSSocket;
+    const userCert = socket.getPeerCertificate(true)
+    //@TODO: Expiration, CRL, and OCSP checks here
     return true;
 }
